@@ -1,0 +1,267 @@
+library(shiny)
+library(plotly)
+library(tidyverse)
+
+# load the data
+setwd("/Users/anhbach/Desktop/DS2003")
+movies <- read_csv("IMDB TMDB Movie Metadata Big Dataset (1M).csv", show_col_types = FALSE)
+
+# pull all unique genres from the genres_list column
+all_genres <- movies$genres_list %>%
+  str_extract_all("'([^']+)'") %>%
+  unlist() %>%
+  str_remove_all("'") %>%
+  unique() %>%
+  sort()
+
+# take the first genre listed for each movie
+movies$primary_genre <- str_extract(movies$genres_list, "(?<=')[^']+(?=')")
+
+# create a decade label like "1990s", "2000s"
+movies$decade <- paste0(floor(movies$release_year / 10) * 10, "s")
+
+
+ui <- fluidPage(
+  
+  titlePanel("What Determines a Movie's Success?"),
+  
+  tabsetPanel(
+    
+    # plot 3 tab
+    tabPanel("Audience vs. Critics",
+             br(),
+             tags$p("Compare how audiences and critics rate movies across genres.
+              Metascore is scaled from 0–100 down to 1–10 so both bars
+              are directly comparable."),
+             fluidRow(
+               column(4,
+                      radioButtons("rating_source", "Audience Rating:",
+                                   choices = c("IMDb Rating" = "IMDB_Rating",
+                                               "TMDB Rating" = "vote_average"),
+                                   inline = TRUE)
+               ),
+               column(4,
+                      sliderInput("year_range3", "Release Year Range:",
+                                  min = 1970, max = 2023, value = c(1970, 2023), sep = "")
+               ),
+               column(4,
+                      selectInput("sort_by", "Sort Genres By:",
+                                  choices = c("Audience Rating"        = "audience",
+                                              "Critic Score"            = "critic",
+                                              "Biggest Disagreement"    = "gap"))
+               )
+             ),
+             plotlyOutput("bars", height = "550px"),
+             tags$p(textOutput("count3"), style = "color: gray; text-align: center;")
+    ),
+    
+    # plot 4 tab
+    tabPanel("Budget vs. Success",
+             br(),
+             tags$p("Explore whether higher budgets lead to more successful movies.
+              Switch the success metric and filter by genre to find patterns."),
+             fluidRow(
+               column(3,
+                      selectInput("metric", "Success Metric (Y-axis):",
+                                  choices = c("Revenue"     = "revenue",
+                                              "IMDb Rating" = "IMDB_Rating",
+                                              "TMDB Rating" = "vote_average",
+                                              "Metascore"   = "Meta_score"))
+               ),
+               column(3,
+                      radioButtons("scale", "Budget Scale:",
+                                   choices = c("Log", "Linear"), inline = TRUE)
+               ),
+               column(3,
+                      selectInput("genre4", "Filter by Genre:",
+                                  choices = c("All", all_genres))
+               ),
+               column(3,
+                      sliderInput("year_range4", "Release Year Range:",
+                                  min = 1970, max = 2023, value = c(1970, 2023), sep = "")
+               )
+             ),
+             plotlyOutput("scatter", height = "550px"),
+             tags$p(textOutput("count4"), style = "color: gray; text-align: center;")
+    )
+  )
+)
+
+
+server <- function(input, output) {
+  
+  # filter data for plot 3
+  get_data3 <- reactive({
+    df <- movies
+    df <- df[!is.na(df$Meta_score), ]
+    if (input$rating_source == "IMDB_Rating") {
+      df <- df[!is.na(df$IMDB_Rating), ]
+    } else {
+      df <- df[!is.na(df$vote_average), ]
+    }
+    df <- df[df$release_year >= input$year_range3[1] &
+               df$release_year <= input$year_range3[2], ]
+    df
+  })
+  
+  # plot 3: animated grouped bar chart
+  output$bars <- renderPlotly({
+    df <- get_data3()
+    
+    # average audience and critic scores per genre per decade
+    if (input$rating_source == "IMDB_Rating") {
+      by_decade <- df %>%
+        group_by(primary_genre, decade) %>%
+        summarise(audience = mean(IMDB_Rating, na.rm = TRUE),
+                  critic = mean(Meta_score, na.rm = TRUE) / 10,
+                  n = n(), .groups = "drop")
+      by_all <- df %>%
+        group_by(primary_genre) %>%
+        summarise(audience = mean(IMDB_Rating, na.rm = TRUE),
+                  critic = mean(Meta_score, na.rm = TRUE) / 10,
+                  n = n(), .groups = "drop") %>%
+        mutate(decade = "All")
+      aud_label <- "Avg IMDb Rating"
+    } else {
+      by_decade <- df %>%
+        group_by(primary_genre, decade) %>%
+        summarise(audience = mean(vote_average, na.rm = TRUE),
+                  critic = mean(Meta_score, na.rm = TRUE) / 10,
+                  n = n(), .groups = "drop")
+      by_all <- df %>%
+        group_by(primary_genre) %>%
+        summarise(audience = mean(vote_average, na.rm = TRUE),
+                  critic = mean(Meta_score, na.rm = TRUE) / 10,
+                  n = n(), .groups = "drop") %>%
+        mutate(decade = "All")
+      aud_label <- "Avg TMDB Rating"
+    }
+    
+    # combine "All" frame with decade frames, "All" first
+    genre_data <- bind_rows(by_all, by_decade)
+    genre_data$decade <- factor(genre_data$decade,
+                                levels = c("All", sort(unique(by_decade$decade))))
+    
+    # calculate the gap between audience and critic for sorting
+    genre_data$gap <- abs(genre_data$audience - genre_data$critic)
+    
+    # sort genres based on dropdown selection
+    if (input$sort_by == "audience") {
+      sort_order <- by_all %>% arrange(desc(audience)) %>% pull(primary_genre)
+    } else if (input$sort_by == "critic") {
+      sort_order <- by_all %>% arrange(desc(critic)) %>% pull(primary_genre)
+    } else {
+      sort_order <- by_all %>% mutate(gap = abs(audience - critic)) %>%
+        arrange(desc(gap)) %>% pull(primary_genre)
+    }
+    
+    # reshape so audience and critic are in one column
+    long <- genre_data %>%
+      pivot_longer(cols = c(audience, critic),
+                   names_to = "type", values_to = "rating") %>%
+      mutate(type = ifelse(type == "audience", aud_label,
+                           "Avg Metascore (scaled 1-10)"))
+    
+    plot_ly(data = long, x = ~primary_genre, y = ~rating,
+            color = ~type, frame = ~decade, type = "bar",
+            text = ~paste("Movies:", n), hoverinfo = "text+y",
+            colors = c("#636EFA", "#EF553B")) %>%
+      layout(barmode = "group",
+             xaxis = list(title = "Genre", categoryorder = "array",
+                          categoryarray = sort_order),
+             yaxis = list(title = "Average Rating (1-10)", range = c(0, 10)),
+             legend = list(orientation = "h", y = -0.2)) %>%
+      animation_opts(frame = 1000, transition = 500, redraw = TRUE) %>%
+      animation_slider(currentvalue = list(prefix = "Decade: ")) %>%
+      animation_button(label = "Play")
+  })
+  
+  output$count3 <- renderText({
+    paste("Showing", nrow(get_data3()), "movies with both audience and critic ratings")
+  })
+  
+  # filter data for plot 4
+  get_data4 <- reactive({
+    df <- movies
+    df <- df[df$budget > 0, ]
+    df <- df[df$release_year >= input$year_range4[1] &
+               df$release_year <= input$year_range4[2], ]
+    if (input$metric == "revenue") {
+      df <- df[df$revenue > 0, ]
+    } else {
+      df <- df[!is.na(df[[input$metric]]), ]
+    }
+    if (input$genre4 != "All") {
+      df <- df[grepl(input$genre4, df$genres_list, fixed = TRUE), ]
+    }
+    df
+  })
+  
+  # plot 4: animated scatterplot
+  output$scatter <- renderPlotly({
+    df <- get_data4()
+    y_vals <- df[[input$metric]]
+    
+    # readable y-axis label
+    y_label <- switch(input$metric,
+                      "revenue"      = "Revenue ($)",
+                      "IMDB_Rating"  = "IMDb Rating",
+                      "vote_average" = "TMDB Rating",
+                      "Meta_score"   = "Metascore")
+    
+    # log scale for budget, log y only for revenue
+    x_type <- if (input$scale == "Log") "log" else "linear"
+    y_type <- if (input$scale == "Log" & input$metric == "revenue") "log" else "linear"
+    
+    # hover text for each point
+    hover <- paste(df$title,
+                   "\nBudget: $", format(df$budget, big.mark = ","),
+                   "\n", y_label, ":", round(y_vals, 1),
+                   "\nDirector:", df$Director)
+    
+    # create an "All" copy so the chart starts with everything shown
+    df_all <- df
+    df_all$decade <- "All"
+    df_combined <- bind_rows(df_all, df)
+    df_combined$decade <- factor(df_combined$decade,
+                                 levels = c("All", sort(unique(df$decade))))
+    
+    y_all <- df_combined[[input$metric]]
+    hover_all <- paste(df_combined$title,
+                       "\nBudget: $", format(df_combined$budget, big.mark = ","),
+                       "\n", y_label, ":", round(y_all, 1),
+                       "\nDirector:", df_combined$Director)
+    
+    # color by genre when showing all, single color when filtered
+    if (input$genre4 == "All") {
+      plot_ly(data = df_combined, x = ~budget, y = y_all,
+              color = ~primary_genre, frame = ~decade,
+              text = hover_all, hoverinfo = "text",
+              type = "scatter", mode = "markers",
+              marker = list(opacity = 0.6, size = 7)) %>%
+        layout(xaxis = list(title = "Budget ($)", type = x_type),
+               yaxis = list(title = y_label, type = y_type),
+               legend = list(title = list(text = "Genre"))) %>%
+        animation_opts(frame = 1000, transition = 500) %>%
+        animation_slider(currentvalue = list(prefix = "Decade: ")) %>%
+        animation_button(label = "Play")
+    } else {
+      plot_ly(data = df_combined, x = ~budget, y = y_all,
+              frame = ~decade,
+              text = hover_all, hoverinfo = "text",
+              type = "scatter", mode = "markers",
+              marker = list(opacity = 0.6, size = 7, color = "#636EFA")) %>%
+        layout(xaxis = list(title = "Budget ($)", type = x_type),
+               yaxis = list(title = y_label, type = y_type)) %>%
+        animation_opts(frame = 1000, transition = 500) %>%
+        animation_slider(currentvalue = list(prefix = "Decade: ")) %>%
+        animation_button(label = "Play")
+    }
+  })
+  
+  output$count4 <- renderText({
+    paste("Showing", nrow(get_data4()), "movies")
+  })
+}
+
+shinyApp(ui, server)
