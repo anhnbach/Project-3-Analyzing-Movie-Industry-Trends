@@ -166,7 +166,11 @@ server <- function(input, output) {
             color = ~type, frame = ~decade, type = "bar",
             text = ~paste("Movies:", n), hoverinfo = "text+y",
             colors = c("#636EFA", "#EF553B")) %>%
-      layout(barmode = "group",
+      layout(
+        title = list(
+          text = "Average Audience vs Critic Ratings by Genre (Filtered Movies)<br><sup>Only movies with both audience and critic scores are included</sup>"
+        ),
+        barmode = "group",
              xaxis = list(title = "Genre", categoryorder = "array",
                           categoryarray = sort_order),
              yaxis = list(title = "Average Rating (1-10)", range = c(0, 10)),
