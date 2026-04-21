@@ -3,8 +3,7 @@ library(plotly)
 library(tidyverse)
 
 # load the data
-movies <- read_csv("IMDB TMDB Movie Metadata Big Dataset (1M).csv", 
-                   show_col_types = FALSE)
+movies <- read_csv("movies_clean.csv", show_col_types = FALSE)
 
 # pull all unique genres from the genres_list column
 all_genres <- movies$genres_list %>%
@@ -80,7 +79,7 @@ ui <- fluidPage(
   tabsetPanel(
     
     #Tab 1: Introduction
-    tabPanel("Introduction (Place holder for now)",
+    tabPanel("Introduction",
              br(),
              div(class = "narrative",
                  p("What is the most recent movie you've seen? Which one do you rewatch the
@@ -109,8 +108,45 @@ ui <- fluidPage(
           and cannot be captured by just one measure, so we aim to investigate how
           audience ratings, number of votes, critic scores, genre, and revenue
           interact to reveal different forms of success."),
-                 p("Use the genre and year filters above to explore all four visualizations.
-          Each tab examines a different dimension of what makes a movie successful.")
+                 p("Knowing that success is such a strong term, our investigation is broken
+          down into four key perspectives. Before you read the final conclusions
+          below, we encourage you to explore the interactive tabs at the top of this
+          page to follow along with our dashboard. Each tab serves as a different
+          lens through which to view the film industry, and all of them have shared
+          filters for genre and year range. Once you have explored the data, scroll
+          down to read our final thoughts on what makes a movie successful."),
+                 br(),
+                 h4("Conclusion"),
+                 p("Overall, our goal of defining a successful movie has revealed that
+          success is not a single destination, but a multifaceted spectrum. Through
+          our analysis of nearly a million titles, it is clear that no one variable,
+          either a large budget, prolific director, or specific genre, acts as a
+          guaranteed formula for a hit. Instead, success is created from a complex
+          interaction of artistic merit, financial backing, and cultural timing and
+          impact. Our journey through the data helped us learn various lessons."),
+                 p("Considering genre and history, while certain genres have dominated
+          specific eras in terms of popularity and ratings, the standard for a good
+          story has evolved alongside filming techniques and audience sensibilities.
+          In terms of the people involved, high-rated directors and star-studded casts
+          can drive immense revenue, but critical acclaim doesn't always translate to
+          becoming a box office hit. The presence of a strong, well-known director
+          definitely raises a movie's ability to generate revenue, but neither has
+          strong associations with popularity."),
+                 p("Considering budget, a larger budget increases a film's potential for
+          revenue and high-end production value, but data has shown that some of the
+          most beloved films by audiences and critics emerged from lower budgets,
+          proving that a compelling story can outperform one with a higher financial
+          capacity. Finally, the persistent gap between critic and audience scores
+          reminds us that movies are experienced differently by everyone, as a movie
+          can be a technical masterpiece to a critic but fail to entertain the
+          public."),
+                 p("Ultimately, success is determined by an individual themselves;
+          whether measured by a record-breaking opening weekend, a high rating, or
+          the number of times a fan decides to watch the movie, the true success of
+          a movie lies in its ability to connect with an audience. As the industry
+          continues to shift, these patterns will keep evolving, but the core of
+          cinema, which is the power of a well-told story, remains the ultimate
+          predictor of a movie's lasting impact.")
              )
     ),
     
@@ -130,7 +166,8 @@ ui <- fluidPage(
              tags$p(textOutput("count1"), style = "color: gray; text-align: center;"),
              br(),
              div(class = "narrative",
-                 p("(Add insights once plot is finalized.)")
+                 p("A line chart is used here because it makes it easier to see how ratings change over time and compare different genres at the same time. Looking at the graph, most genres stay within a pretty similar range, which shows that ratings don't really swing that much over time. Even though trends and preferences change, what people consider a 'good' movie seems to stay fairly consistent."),
+                 p("At the same time, there are still some noticeable differences. Certain genres, like drama, tend to stay a little higher, while others move around more depending on the time period. When you filter by genre, you can see these patterns more clearly and how audience opinions shift depending on what kinds of movies are popular at the time. Overall, this shows that ratings are pretty stable, but they still play an important role in how we think about success.")
              )
     ),
     
@@ -310,7 +347,6 @@ server <- function(input, output) {
   # Tab 2: Ratings Over Time
   output$plot1 <- renderPlotly({
     df <- movies
-    df$release_year <- as.numeric(substr(df$release_date, 1, 4))
     df <- df[!is.na(df$vote_average), ]
     
     # shared filters
