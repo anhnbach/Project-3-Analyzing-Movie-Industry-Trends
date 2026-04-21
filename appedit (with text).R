@@ -56,7 +56,7 @@ ui <- fluidPage(
   
   tags$head(tags$style(HTML("
     .container-fluid { max-width: 100%; padding-left: 30px; padding-right: 30px; }
-    .narrative {font-size: 16px; line-height: 1.7; max-width: 900px: margin: auto; background-color: #f5f5f5; padding: 20px; border-radius: 10px; }
+    .narrative {font-size: 16px; line-height: 1.7; max-width: 900px; margin: auto; background-color: #f5f5f5; padding: 20px; border-radius: 10px; }
     .narrative p { margin-bottom: 14px; }
     .note { color: gray; font-size: 13px; font-style: italic; margin-top: 10px; }
   "))),
